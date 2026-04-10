@@ -3,8 +3,9 @@
  * to work on newer WebXR-only browsers like Meta Quest 3.
  */
 (function () {
-  if (navigator.xr && !navigator.getVRDisplays) {
-    console.log("WebXR detected, applying WebVR shim...");
+  // Always apply if navigator.xr is present to ensure native Quest support
+  if (navigator.xr) {
+    console.log("WebXR detected, applying WebVR compatibility shim...");
 
     var currentSession = null;
     var currentReferenceSpace = null;
@@ -21,41 +22,40 @@
         hasOrientation: true,
         maxLayers: 1,
       };
+      this.depthNear = 0.1;
+      this.depthFar = 10000;
     }
 
     XRVRDisplay.prototype.getEyeParameters = function (eye) {
-      if (currentSession && currentSession.renderState.baseLayer) {
-        var layer = currentSession.renderState.baseLayer;
-        return {
-          renderWidth: layer.framebufferWidth / 2,
-          renderHeight: layer.framebufferHeight,
-          offset: [eye === "left" ? -0.03 : 0.03, 0, 0],
-          fieldOfView: {
-            upDegrees: 45,
-            downDegrees: 45,
-            leftDegrees: 45,
-            rightDegrees: 45,
-          },
-        };
-      }
+      // Return reasonable defaults for Quest 3 if no session yet
       return {
-        renderWidth: window.innerWidth / 2,
-        renderHeight: window.innerHeight,
-        offset: [eye === "left" ? -0.03 : 0.03, 0, 0],
+        renderWidth: (currentWebGLLayer ? currentWebGLLayer.framebufferWidth : window.innerWidth) / 2,
+        renderHeight: currentWebGLLayer ? currentWebGLLayer.framebufferHeight : window.innerHeight,
+        offset: [eye === "left" ? -0.031 : 0.031, 0, 0],
         fieldOfView: {
-          upDegrees: 45,
-          downDegrees: 45,
-          leftDegrees: 45,
-          rightDegrees: 45,
+          upDegrees: 50,
+          downDegrees: 50,
+          leftDegrees: 50,
+          rightDegrees: 50,
         },
       };
+    };
+
+    XRVRDisplay.prototype.getLayers = function () {
+      return [
+        {
+          leftBounds: [0.0, 0.0, 0.5, 1.0],
+          rightBounds: [0.5, 0.0, 0.5, 1.0],
+          source: document.querySelector("canvas"),
+        },
+      ];
     };
 
     XRVRDisplay.prototype.requestPresent = function (layers) {
       var self = this;
       return navigator.xr
         .requestSession("immersive-vr", {
-          optionalFeatures: ["local-floor", "bounded-floor"],
+          optionalFeatures: ["local-floor", "bounded-floor", "hand-tracking"],
         })
         .then(function (session) {
           currentSession = session;
@@ -64,25 +64,27 @@
           var canvas =
             (layers && layers[0] && layers[0].source) ||
             document.querySelector("canvas");
-          var gl =
-            canvas.getContext("webgl", { xrCompatible: true }) ||
-            canvas.getContext("experimental-webgl", { xrCompatible: true });
+          
+          // Ensure the context is XR compatible
+          var gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+          
+          return (gl.makeXRCompatible ? gl.makeXRCompatible() : Promise.resolve()).then(function() {
+             currentWebGLLayer = new XRWebGLLayer(session, gl);
+             session.updateRenderState({ baseLayer: currentWebGLLayer });
 
-          currentWebGLLayer = new XRWebGLLayer(session, gl);
-          session.updateRenderState({ baseLayer: currentWebGLLayer });
+             return session.requestReferenceSpace("local").then(function (refSpace) {
+               currentReferenceSpace = refSpace;
+               
+               session.addEventListener("end", function () {
+                 self.isPresenting = false;
+                 currentSession = null;
+                 window.dispatchEvent(new CustomEvent("vrdisplaypresentchange"));
+               });
 
-          session.requestReferenceSpace("local").then(function (refSpace) {
-            currentReferenceSpace = refSpace;
+               window.dispatchEvent(new CustomEvent("vrdisplaypresentchange"));
+               console.log("WebXR Session started successfully");
+             });
           });
-
-          session.addEventListener("end", function () {
-            self.isPresenting = false;
-            currentSession = null;
-            window.dispatchEvent(new CustomEvent("vrdisplaypresentchange"));
-          });
-
-          window.dispatchEvent(new CustomEvent("vrdisplaypresentchange"));
-          return Promise.resolve();
         });
     };
 
@@ -125,6 +127,12 @@
       return true;
     };
 
+    XRVRDisplay.prototype.getPose = function () {
+      var frameData = new window.VRFrameData();
+      this.getFrameData(frameData);
+      return frameData.pose;
+    };
+
     XRVRDisplay.prototype.requestAnimationFrame = function (callback) {
       if (currentSession) {
         return currentSession.requestAnimationFrame(function (time, frame) {
@@ -135,8 +143,11 @@
       return window.requestAnimationFrame(callback);
     };
 
-    XRVRDisplay.prototype.submitFrame = function () {};
+    XRVRDisplay.prototype.submitFrame = function () {
+      // WebXR handles this automatically via the base layer
+    };
 
+    // Override even if already exists (e.g. from polyfill)
     navigator.getVRDisplays = function () {
       return navigator.xr
         .isSessionSupported("immersive-vr")
@@ -162,3 +173,4 @@
     }
   }
 })();
+

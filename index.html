@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang=en>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0, shrink-to-fit=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<!-- ES6 promise -->
+<script src="https://cdn.jsdelivr.net/npm/es6-promise@4.2.4/dist/es6-promise.min.js"></script>
+<!-- jQuery -->
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.3.1/dist/jquery.min.js"></script>
+<!-- Three.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/92/three.min.js"></script>
+<!-- Three.js VR controls -->
+<!-- Requesting positional information from connected VR device -->
+<!-- and apply the transformation to a camera. -->
+<!-- Src: https://github.com/mrdoob/three.js/blob/master/examples/js/controls/VRControls.js -->
+<script src="js/lib/VRControls.js"></script>
+<!-- Three.js VR effects -->
+<!-- Handles stereo camera setup and rendering -->
+<!-- Src: https://github.com/mrdoob/three.js/blob/master/examples/js/effects/VREffect.js -->
+<script src="js/lib/VREffect.js"></script>
+<!-- Three.js orbit controls -->
+<!-- Camera controling -->
+<!-- Src: https://github.com/mrdoob/three.js/raw/master/examples/js/controls/OrbitControls.js -->
+<script src="js/lib/OrbitControls.js"></script>
+<!-- Three.js lens flare -->
+<!-- Src: https://github.com/mrdoob/three.js/blob/master/examples/js/objects/Lensflare.js -->
+<script src="js/lib/Lensflare.js"></script>
+<!-- WebVR Polyfill -->
+<script src="https://cdn.jsdelivr.net/npm/webvr-polyfill@0.10.5/build/webvr-polyfill.min.js"></script>
+<!-- Google WebVR UI -->
+<script src="https://cdn.jsdelivr.net/npm/webvr-ui@0.9.4/build/webvr-ui.min.js"></script>
+<!-- WebXR Compatibility Shim -->
+<script src="js/lib/webxr-shim.js"></script>
+<!-- Shader program -->
+<script src="js/shader.js"></script>
+<!-- Starfield generator -->
+<script src="js/starfield.js"></script>
+<!-- Initialization program -->
+<script src="js/index.js"></script>
+<!-- Rendering -->
+<script src="js/render.js"></script>
+<!-- Geomatric transformations -->
+<script src="js/transform.js"></script>
+<!-- HUD -->
+<script src="js/hud.js"></script>
+<!-- VR Menu (Quest 3 support) -->
+<script src="js/vr_menu.js"></script>
+<!-- Timing -->
+<script src="js/time.js"></script>
+<!-- VR Help Tutorial -->
+<script src="js/vr_help.js"></script>
+<!-- This files contains stuff for controling -->
+<script src="js/poi.js"></script>
+<script src="js/control.js"></script>
+<!-- Compiled and minified Materialize CSS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0-rc.1/css/materialize.min.css">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<!-- Compiled and minified Materialize JavaScript -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0-rc.1/js/materialize.min.js"></script>
+<!-- Keys -->
+<link rel="stylesheet" href="css/index.css"/>
+<title>EarthVR</title>
+</head>
+<body>
+    <div id="ui" style="width:100%;">
+        <div id="vr-button"></div>
+        <div style="margin-top: 10px">
+            <a id="magic-window" href="#" class="waves-effect waves-light btn" style="margin:4px;">
+                <i class="material-icons left">visibility</i>
+                Try without headset
+            </a>
+            <a href="#settings" class="waves-effect waves-light btn modal-trigger" style="margin:4px;">
+                <i class="material-icons left">settings</i>
+                Settings
+            </a>
+        </div>
+    </div>
+
+    <!-- Floating Rotation Speed HUD -->
+    <div id="speed-hud">
+        <div class="hud-title">&#9881; Controls</div>
+        <div style="margin-bottom: 10px;">
+            <button onclick="if(typeof launchMeteor==='function') launchMeteor()" class="btn-small orange">Launch Meteor</button>
+            <button onclick="if(typeof toggleDoomsday==='function') toggleDoomsday()" class="btn-small red darken-4">Giant Meteor</button>
+            <button onclick="if(typeof resetEarth==='function') resetEarth()" class="btn-small blue">Reset Earth</button>
+        </div>
+        <label>
+            <span>Time Speed</span>
+            <span class="val-label" id="hud-time-val">5000x</span>
+        </label>
+        <input id="hudTimeSlider" type="range" min="0" max="20000" step="500" value="5000"
+               oninput="syncTimeSpeed(this.value);">
+        <label>
+            <span>Earth Rotation</span>
+            <span class="val-label" id="hud-earth-val">1.0x</span>
+        </label>
+        <input id="hudEarthSlider" type="range" min="0" max="5" step="0.1" value="1"
+               oninput="syncEarthSpeed(this.value);">
+        <label>
+            <span>Moon Rotation</span>
+            <span class="val-label" id="hud-moon-val">1.0x</span>
+        </label>
+        <input id="hudMoonSlider" type="range" min="0" max="5" step="0.1" value="1"
+               oninput="syncMoonSpeed(this.value);">
+    </div>
+    <script>
+        function syncTimeSpeed(val) {
+            timeScale = parseFloat(val);
+            document.getElementById('hud-time-val').innerText = timeScale + 'x';
+            if (typeof menuState !== 'undefined') menuState.timeScale = timeScale;
+            updateVRMenuCanvas && updateVRMenuCanvas();
+        }
+        function updateTimeSlider() {
+            if (typeof menuState !== 'undefined' && updateVRMenuCanvas) updateVRMenuCanvas();
+        }
+    </script>
+    <div id="settings" class="modal" style="overflow:hidden;height:70%;min-height:250px;">
+        <div style="position:relative;overflow:hidden;display:flex;flex-direction:column;height:100%;">
+            <div class="modal-content" style="flex:0 0 auto;">
+                <h4>Settings</h4>
+            </div>
+            <div class="modal-content" style="padding-top:0;overflow-y:auto;flex:1 1 auto;">
+                <h6>HUD</h6>
+                <div class="row switch">
+                    <label>
+                        <input id="toggleHUD" type="checkbox" checked>
+                        <span class="lever"></span>
+                        Show HUD
+                    </label>
+                    <script>
+                        $('#toggleHUD').change(function () {
+                            if ($('#toggleHUD').prop('checked')) {
+                                earthHUD.show(); moonHUD.show();
+                            } else {
+                                earthHUD.hide(); moonHUD.hide();
+                            }
+                        });
+                    </script>
+                </div>
+                <h6>Time</h6>
+                <div class="row" style="margin-bottom:0;">
+                    <div class="input-field col s6">
+                        <input id="date" type="text" class="datepicker">
+                        <label for="date">Date</label>
+                    </div>
+                    <div class="input-field col s6">
+                        <input id="time" type="text" class="timepicker">
+                        <label for="time">Time</label>
+                    </div>
+                </div>
+                <h6>Time scale</h6>
+                <div id="time-scale-selection">
+                    <div class="row" style="margin-bottom:4px;">
+                        <div class="col s4">
+                            <label>
+                                <input class="with-gap" name="time-scale" type="radio" value="0.1" onchange="updateTimeScale();" />
+                                <span>0.1x</span>
+                            </label>
+                        </div>
+                        <div class="col s4">
+                            <label>
+                                <input class="with-gap" name="time-scale" type="radio" value="1" onchange="updateTimeScale();" checked/>
+                                <span>1x</span>
+                            </label>
+                        </div>
+                        <div class="col s4">
+                            <label>
+                                <input class="with-gap" name="time-scale" type="radio" value="10" onchange="updateTimeScale();" />
+                                <span>10x</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="row" style="margin-bottom:4px;">
+                        <div class="col s4">
+                            <label>
+                                <input class="with-gap" name="time-scale" type="radio" value="100" onchange="updateTimeScale();" />
+                                <span>100x</span>
+                            </label>
+                        </div>
+                        <div class="col s4">
+                            <label>
+                                <input class="with-gap" name="time-scale" type="radio" value="1000" onchange="updateTimeScale();" />
+                                <span>1000x</span>
+                            </label>
+                        </div>
+                        <div class="col s4">
+                            <label>
+                                <input class="with-gap" name="time-scale" type="radio" value="10000" onchange="updateTimeScale();" />
+                                <span>10000x</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="row" style="margin-bottom:4px;">
+                        <div class="col s4">
+                            <label>
+                                <input class="with-gap" name="time-scale" type="radio" value="100000" onchange="updateTimeScale();" />
+                                <span>100000x</span>
+                            </label>
+                        </div>
+                        <div class="col s4">
+                            <label>
+                                <input class="with-gap" name="time-scale" type="radio" value="1000000" onchange="updateTimeScale();" />
+                                <span>1000000x</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <h6>Rotation Speed</h6>
+                <div class="row" style="margin-bottom:0;">
+                    <div class="col s12">
+                        <label>Earth Rotation: <span id="earth-speed-value" class="speed-badge">1.0x</span></label>
+                        <input id="earthRotationSlider" type="range" min="0" max="5" step="0.1" value="1"
+                               oninput="syncEarthSpeed(this.value);" style="width: 100%;">
+                    </div>
+                </div>
+                <div class="row" style="margin-bottom:0;">
+                    <div class="col s12">
+                        <label>Moon Rotation: <span id="moon-speed-value" class="speed-badge">1.0x</span></label>
+                        <input id="moonRotationSlider" type="range" min="0" max="5" step="0.1" value="1"
+                               oninput="syncMoonSpeed(this.value);" style="width: 100%;">
+                    </div>
+                </div>
+            </div>
+            <script>
+                function updateTimeScale() {
+                    timeScale = parseFloat($('input[name="time-scale"]:checked').val());
+                }
+                // Syncs both modal slider + HUD slider + global speed var
+                function syncEarthSpeed(val) {
+                    earthRotationSpeed = parseFloat(val);
+                    var label = earthRotationSpeed.toFixed(1) + 'x';
+                    $('#earth-speed-value').text(label);
+                    $('#hud-earth-val').text(label);
+                    $('#earthRotationSlider').val(val);
+                    $('#hudEarthSlider').val(val);
+                }
+                function syncMoonSpeed(val) {
+                    moonRotationSpeed = parseFloat(val);
+                    var label = moonRotationSpeed.toFixed(1) + 'x';
+                    $('#moon-speed-value').text(label);
+                    $('#hud-moon-val').text(label);
+                    $('#moonRotationSlider').val(val);
+                    $('#hudMoonSlider').val(val);
+                }
+            </script>
+            <div class="modal-footer" style="flex:0 0 auto;">
+                <a href="#!" class="modal-close waves-effect waves-green btn-flat">Done</a>
+            </div>
+        </div>
+    </div>
+    <div id="about" class="modal" style="overflow:hidden;height:80%;">
+        <div style="position:relative;overflow:hidden;display:flex;flex-direction:column;height:100%;">
+            <div class="modal-content" style="flex:0 0 auto;">
+                <h4>About</h4>
+            </div>
+            <div class="modal-content" style="padding-top:0;overflow-y:auto;flex:1 1 auto;">
+                <h5>EarthVR</h5>
+                <p>
+                    See the earth, from the space, anywhere.
+                </p>
+                <h5>Joystick Control</h5>
+                <p>
+                    EarthVR supports R1 gamepad control.
+                </p>
+                <p>
+                    <b>Axis 0 & 1</b>: Rotating about the earth
+                    <br>
+                    <b>B5</b>
+                    <a class="waves-effect grey lighten-4 teal-text text-darken-2 btn keyboard">⏎</a> +
+                    <b>Axis 1</b>: Zooming
+                    <br>
+                    <b>B3</b> (sometimes
+                    <a class="waves-effect grey lighten-4 teal-text text-darken-2 btn keyboard">A</a> on the pad): Faster time
+                    <br>
+                    <b>B2</b> (sometimes
+                    <a class="waves-effect grey lighten-4 teal-text text-darken-2 btn keyboard">C</a>): Slower time
+                    <br>
+                    <b>B4</b>
+                    <a class="waves-effect grey lighten-4 teal-text text-darken-2 btn keyboard">◯</a>: Toggling HUD
+                </p>
+                <h5>Mouse & Keyboard Control</h5>
+                <p>
+                    When using a PC, the VR effect will not work. You can simply use your mouse and keyboard to navigate.
+                </p>
+                <p></p>
+                <b>Left mouse button</b>: Rotating about axis
+                <br>
+                <b>Right mouse button</b> and
+                <a class="waves-effect grey lighten-4 teal-text text-darken-2 btn keyboard">←</a>
+                <a class="waves-effect grey lighten-4 teal-text text-darken-2 btn keyboard">↑</a>
+                <a class="waves-effect grey lighten-4 teal-text text-darken-2 btn keyboard">↓</a>
+                <a class="waves-effect grey lighten-4 teal-text text-darken-2 btn keyboard">→</a>: Moving around the scene
+                <br>
+                <b>Mouse wheel</b>: Zooming</p>
+                <h5>GitHub</h5>
+                <a target="_blank" href="https://github.com/celestialphineas/EarthVR" class="waves-effect waves-light btn" style="margin:4px;">
+                    <i class="material-icons left">open_in_new</i>
+                    GitHub Repository
+                </a>
+                <h5>Credits</h5>
+                <ul>
+                    <li>The well-known <a target="_blank" href="https://jquery.com/">
+                        jQuery
+                        <i class="material-icons tiny">open_in_new</i>
+                    </a></li>
+                    <li>Mr.doob's fantastic WebGL library <a target="_blank" href="https://threejs.org/">
+                        three.js
+                        <i class="material-icons tiny">open_in_new</i>
+                    </a></li>
+                    <li>Thanks to <a target="_blank" href="https://github.com/immersive-web/webvr-polyfill">
+                        WebVR Polyfill
+                        <i class="material-icons tiny">open_in_new</i>
+                    </a>, we can use WebVR without a special browser build.</li>
+                    <li>Dependency of WebVR Polyfill, <a target="_blank" href="https://github.com/stefanpenner/es6-promise">
+                        ES6-Promise
+                        <i class="material-icons tiny">open_in_new</i>
+                    </a></li>
+                    <li><a target="_blank" href="https://github.com/googlevr/webvr-ui">
+                        Google WebVR UI
+                        <i class="material-icons tiny">open_in_new</i>
+                    </a></li>
+                    <li>Simple yet beautiful <a target="_blank" href="https://materializecss.com/">
+                        Materialize
+                        <i class="material-icons tiny">open_in_new</i>
+                    </a>.css</li>
+                </ul>
+                <h5>Author</h5>
+                <p>
+                    <a target="_blank" href="https://github.com/celestialphineas">© Celestial Phineas @ ZJU</a><br>
+                    MIT License
+                </p>
+            </div>
+            <div class="modal-footer" style="flex:0 0 auto;">
+                <a href="#!" class="modal-close waves-effect waves-green btn-flat">Close</a>
+            </div>
+        </div>
+    </div>
+    <script>
+        $(document).ready(function () {
+            $('.modal').modal();
+            $('.datepicker').datepicker({
+                autoClose: true,
+                container: 'body',
+                onSelect: function (date) {
+                    currentTime.setFullYear(date.getFullYear());
+                    currentTime.setMonth(date.getMonth());
+                    currentTime.setDate(date.getDate());
+                }
+            });
+            $('.timepicker').timepicker({
+                autoClose: true,
+                container: 'body',
+                onCloseEnd: function () {
+                    var time = new Date("2000/01/01 " + document.getElementById('time').value);
+                    currentTime.setHours(time.getHours());
+                    currentTime.setMinutes(time.getMinutes());
+                }
+            });
+        });
+    </script>
+</body>
+</html>
